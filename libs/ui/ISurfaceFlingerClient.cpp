@@ -54,6 +54,8 @@ enum {
     CREATE_SURFACE,
     DESTROY_SURFACE,
     SET_STATE,
+    REGISTER_GRAB_BUFFER,
+    UNREGISTER_GRAB_BUFFER,
     GRAB_SCREEN
 };
 
@@ -114,14 +116,38 @@ public:
         return reply.readInt32();
     }
 
-    virtual status_t grabScreen(DisplayID dpy, int fd)
+    virtual status_t registerGrabBuffer(DisplayID dpy, int fd)
     {
         Parcel data, reply;
         data.writeInterfaceToken(ISurfaceFlingerClient::getInterfaceDescriptor());
         data.writeInt32(dpy);
         data.writeFileDescriptor(fd);
-        remote()->transact(GRAB_SCREEN, data, &reply);
+        remote()->transact(REGISTER_GRAB_BUFFER, data, &reply);
         return reply.readInt32();
+    }
+
+    virtual status_t unregisterGrabBuffer(DisplayID dpy)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(ISurfaceFlingerClient::getInterfaceDescriptor());
+        data.writeInt32(dpy);
+        remote()->transact(UNREGISTER_GRAB_BUFFER, data, &reply);
+        return reply.readInt32();
+    }
+
+    virtual status_t grabScreen(bool incremental, Region &updatedRegion)
+    {
+        Parcel data, reply;
+        status_t err;
+        data.writeInterfaceToken(ISurfaceFlingerClient::getInterfaceDescriptor());
+        data.writeInt32(incremental);
+        remote()->transact(GRAB_SCREEN, data, &reply);
+        err = reply.readInt32();
+        if(err == NO_ERROR)
+        {
+            updatedRegion.read(reply);
+        }
+        return err;
     }
 };
 
@@ -191,11 +217,26 @@ status_t BnSurfaceFlingerClient::onTransact(
             reply->writeInt32(err);
             return NO_ERROR;
         } break;
-        case GRAB_SCREEN: {
+        case REGISTER_GRAB_BUFFER: {
             CHECK_INTERFACE(ISurfaceFlingerClient, data, reply);
             DisplayID dpy = data.readInt32();
             int fd = data.readFileDescriptor();
-            reply->writeInt32( grabScreen(dpy, fd) );
+            reply->writeInt32( registerGrabBuffer(dpy, fd) );
+            return NO_ERROR;
+        } break;
+        case UNREGISTER_GRAB_BUFFER: {
+            CHECK_INTERFACE(ISurfaceFlingerClient, data, reply);
+            DisplayID dpy = data.readInt32();
+            reply->writeInt32( unregisterGrabBuffer(dpy) );
+            return NO_ERROR;
+        } break;
+        case GRAB_SCREEN: {
+            CHECK_INTERFACE(ISurfaceFlingerClient, data, reply);
+            bool incremental = data.readInt32();
+            Region updatedRegion;
+            status_t err = grabScreen(incremental, updatedRegion);
+            reply->writeInt32( err );
+            updatedRegion.write(*reply);
             return NO_ERROR;
         } break;
         default:

@@ -27,6 +27,7 @@
 #include <ui/ISurface.h>
 
 #include <ui/PixelFormat.h>
+#include <ui/Region.h>
   
 namespace android {
 
@@ -73,7 +74,9 @@ public:
 
     virtual status_t    setState(int32_t count, const layer_state_t* states) = 0;
 
-    virtual status_t    grabScreen(DisplayID dpy, int fd) = 0;
+    virtual status_t    registerGrabBuffer(DisplayID dpy, int fd) = 0;
+    virtual status_t    unregisterGrabBuffer(DisplayID dpy) = 0;
+    virtual status_t    grabScreen(bool incremental, Region &updatedRegion) = 0;
 };
 
 // ----------------------------------------------------------------------------

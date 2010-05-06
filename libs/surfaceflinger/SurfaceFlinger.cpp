@@ -542,7 +542,7 @@ void SurfaceFlinger::handleScreenGrabs()
 
             /* This client has died - ignore it here */
 
-        } else {
+        } else if(client->mGrabPending) {
 
             if(mSecureFrameBuffer) {
 
@@ -557,6 +557,26 @@ void SurfaceFlinger::handleScreenGrabs()
 
             } else {
 
+                /* Here we update the buffer for the whole of
+                 * mInvalidRegion, even parts that aren't present in
+                 * mGrabRegion. This is to ensure that we return a
+                 * consistent snapshot of a single screen state when
+                 * the grab completes.
+                 *
+                 * When postFramebuffer() is called, we know that the
+                 * dirty region represents the latest correct, atomic
+                 * snapshot of those parts of the frame buffer
+                 * contents. So if we update the grab buffer
+                 * partially, we can be sure that if those areas
+                 * change again before the end of the grab, they'll be
+                 * present in the dirty region on a subsequent call to
+                 * postFramebuffer() and we'll update them again.
+                 *
+                 * So when mGrabRegion becomes empty, we know that
+                 * every pixel that it previously covered contains its
+                 * latest up-to-date colour value, no matter how long
+                 * ago we updated it. */
+
                 Region::const_iterator it = mInvalidRegion.begin();
                 Region::const_iterator const end = mInvalidRegion.end();
                 const DisplayHardware& hw(graphicPlane(0).displayHardware());
@@ -566,17 +586,30 @@ void SurfaceFlinger::handleScreenGrabs()
                     const Rect& r = *it++;
                     int yy = hw.getHeight() - (r.top + r.height());
                     err = hw.getDisplaySurfaceImage(r.left, yy, r.width(), r.height(), (uint8_t *)client->mClientBuffer);
-                    client->mGrabRegion.subtractSelf(r);
+
+                    if(!err) {
+                        client->mGrabRegion.subtractSelf(r);
+
+                        Rect r2 = r;
+                        r2.top = yy;
+                        r2.bottom = yy + r.height();
+                        client->mUpdatedRegion.orSelf(r2);
+                    }
                 }
 
                 client->mGrabError = err;
+
+                if(client->mGrabRegion.isEmpty())
+                    client->mGrabPending = false;
             }
 
-            if(client->mGrabError || client->mGrabRegion.isEmpty())
+            if(client->mGrabError || !client->mGrabPending)
             {
                 client->mGrabCV.broadcast();
-                mGrabbers.removeAt(i-1);
             }
+        } else {
+            /* Registered grabber without a pending grab. */
+            client->mGrabRegion.orSelf(mInvalidRegion);
         }
     }
 }
@@ -879,7 +912,7 @@ void SurfaceFlinger::handleRepaint()
         sp<BClient> client = mGrabbers[i-1].promote();
         if(client == NULL) {
             mGrabbers.removeAt(i-1);
-        } else {
+        } else if(client->mGrabPending) {
             mInvalidRegion.orSelf(client->mGrabRegion);
         }
     }
@@ -1814,13 +1847,16 @@ void Client::dump(const char* what)
 #endif
 
 BClient::BClient(SurfaceFlinger *flinger, ClientID cid, const sp<IMemoryHeap>& cblk)
-    : mId(cid), mFlinger(flinger), mCblk(cblk)
+    : mId(cid), mFlinger(flinger), mCblk(cblk), mClientBuffer(NULL)
 {
 }
 
 BClient::~BClient() {
     // destroy all resources attached to this client
     mFlinger->destroyConnection(mId);
+    if(mClientBuffer) {
+        unregisterGrabBuffer(0);
+    }
 }
 
 sp<IMemoryHeap> BClient::getControlBlock() const {
@@ -1846,8 +1882,14 @@ status_t BClient::setState(int32_t count, const layer_state_t* states)
     return mFlinger->setClientState(mId, count, states);
 }
 
-status_t BClient::grabScreen(DisplayID dpy, int fd)
+status_t BClient::registerGrabBuffer(DisplayID dpy, int fd)
 {
+    Mutex::Autolock _l(mFlinger->mStateLock);
+
+    if(mClientBuffer != NULL) {
+        return INVALID_OPERATION;
+    }
+
     if (UNLIKELY(checkCallingPermission(
             String16("android.permission.READ_FRAME_BUFFER")) == false))
     { // not allowed
@@ -1858,6 +1900,54 @@ status_t BClient::grabScreen(DisplayID dpy, int fd)
         return PERMISSION_DENIED;
     }
 
+    const DisplayHardware& hw(mFlinger->graphicPlane(0).displayHardware());
+    mClientBufferSize = hw.getWidth() * hw.getHeight() * bytesPerPixel(hw.getFormat());
+
+    mClientBuffer = mmap(0, mClientBufferSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
+    if(mClientBuffer == MAP_FAILED) {
+        LOGE("mmap(): %s", strerror(errno));
+        mClientBuffer = NULL;
+        return -errno;
+    }
+
+    mFlinger->mGrabbers.add(this);
+
+    return NO_ERROR;
+}
+
+status_t BClient::unregisterGrabBuffer(DisplayID dpy)
+{
+    Mutex::Autolock _l(mFlinger->mStateLock);
+
+    if(mClientBuffer == NULL) {
+        return INVALID_OPERATION;
+    }
+
+    if(munmap(mClientBuffer, mClientBufferSize) < 0) {
+        LOGE("munmap() failed (%s) - not sure what to do", strerror(errno));
+    }
+    mClientBuffer = NULL;
+
+    if(mGrabPending) {
+        mGrabPending = false;
+        mGrabError = -EPIPE;
+        mGrabCV.broadcast();
+    }
+
+    for(int i=0; i<mFlinger->mGrabbers.size(); i++) {
+        sp<BClient> client = mFlinger->mGrabbers[i].promote();
+        if(client == this) {
+            mFlinger->mGrabbers.removeAt(i);
+            break;
+        }
+    }
+
+    return NO_ERROR;
+}
+
+status_t BClient::grabScreen(bool incremental, Region &changedRegion)
+{
     // For now, we assume only one display.
 
     Mutex::Autolock _l(mFlinger->mStateLock);
@@ -1873,33 +1963,41 @@ status_t BClient::grabScreen(DisplayID dpy, int fd)
         return PERMISSION_DENIED;
     }
 
-    const DisplayHardware& hw(mFlinger->graphicPlane(0).displayHardware());
-    mClientBufferSize = hw.getWidth() * hw.getHeight() * bytesPerPixel(hw.getFormat());
-
-    mClientBuffer = mmap(0, mClientBufferSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-
-    if(mClientBuffer == MAP_FAILED)
-    {
-        LOGE("mmap(): %s", strerror(errno));
-        return -errno;
+    if(mClientBuffer == NULL) {
+        return INVALID_OPERATION;
     }
 
-    mFlinger->mGrabbers.add(this);
+    const DisplayHardware& hw(mFlinger->graphicPlane(0).displayHardware());
 
-    mGrabRegion.set(hw.getWidth(), hw.getHeight());
+    if(!incremental) {
+        mGrabRegion.set(hw.getWidth(), hw.getHeight());
 
+        /* A non-incremental grab is meant to finish immediately, but
+         * if the screen is powered off it will hang forever, so we
+         * return here with a completely black buffer.
+         *
+         * Incremental grabs are allowed to proceed because they are
+         * intended to wait for a screen change, which will happen
+         * when the screen wakes up again. */
+
+        if(!hw.canDraw()) {
+            memset(mClientBuffer, 0, mClientBufferSize);
+            return 0;
+        }
+    }
+
+    mUpdatedRegion.clear();
+
+    mGrabPending = true;
     mFlinger->signalEvent();
 
-    while(!mGrabRegion.isEmpty())
-    {
+    while(mGrabPending) {
         mGrabCV.wait(mFlinger->mStateLock);
     }
 
-    if(munmap(mClientBuffer, mClientBufferSize) < 0)
-    {
-        LOGE("munmap() failed (%s) - not sure what to do", strerror(errno));
+    if(!mGrabError) {
+        changedRegion = mUpdatedRegion;
     }
-    mClientBuffer = NULL;
 
     return mGrabError;
 }

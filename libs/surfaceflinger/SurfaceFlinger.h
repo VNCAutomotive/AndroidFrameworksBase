@@ -409,7 +409,9 @@ public:
     virtual status_t destroySurface(SurfaceID surfaceId);
     virtual status_t setState(int32_t count, const layer_state_t* states);
 
-    virtual status_t grabScreen(DisplayID dpy, int fd);
+    virtual status_t registerGrabBuffer(DisplayID dpy, int fd);
+    virtual status_t unregisterGrabBuffer(DisplayID dpy);
+    virtual status_t grabScreen(bool incremental, Region &updatedRegion);
 
 private:
     friend class SurfaceFlinger;
@@ -421,9 +423,11 @@ private:
     void*               mClientBuffer; // Pointer to mmap()ed screen grab buffer
     size_t              mClientBufferSize; // size of mClientBuffer in bytes
 
-    Region              mGrabRegion;
-    status_t            mGrabError;
-    Condition           mGrabCV;
+    bool                mGrabPending; // true if client is blocked in grabScreen()
+    Region              mGrabRegion; // screen area that this client needs to grab
+    Region              mUpdatedRegion; // screen area that current grab has updated
+    status_t            mGrabError; // success or error code for current grab operation
+    Condition           mGrabCV; // signalled when grab has completed
 };
 
 // ---------------------------------------------------------------------------

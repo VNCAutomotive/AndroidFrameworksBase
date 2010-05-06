@@ -28,6 +28,7 @@
 #include <ui/DisplayInfo.h>
 #include <ui/ISurfaceComposer.h>
 #include <ui/SurfaceComposerClient.h>
+#include <ui/Region.h>
 #include <cutils/log.h>
 #include <cutils/ashmem.h>
 
@@ -137,6 +138,7 @@ int main(void)
     size_t fb_size;
     void *data;
     SurfaceComposerClient srfCmp;
+    Region updatedRegion;
 
     err = srfCmp.getDisplayInfo(dpy, &info);
     if(err) {
@@ -169,9 +171,21 @@ int main(void)
         return -errno;
     }
 
-    err = srfCmp.grabScreen(dpy, fb_fd);
+    err = srfCmp.registerGrabBuffer(dpy, fb_fd);
+    if(err) {
+        LOGE("registerGrabBuffer: %d", err);
+        return -1;
+    }
+
+    err = srfCmp.grabScreen(false, updatedRegion);
     if(err) {
         LOGE("grabScreen: %d", err);
+        return -1;
+    }
+
+    err = srfCmp.unregisterGrabBuffer(dpy);
+    if(err) {
+        LOGE("unregisterGrabBuffer: %d", err);
         return -1;
     }
 

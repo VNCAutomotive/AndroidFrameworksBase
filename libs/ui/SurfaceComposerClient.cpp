@@ -616,9 +616,19 @@ status_t SurfaceComposerClient::setFreezeTint(SurfaceID id, uint32_t tint)
     return NO_ERROR;
 }
 
-status_t SurfaceComposerClient::grabScreen(DisplayID dpy, int fd)
+status_t SurfaceComposerClient::registerGrabBuffer(DisplayID dpy, int fd)
 {
-    return mClient->grabScreen(dpy, fd);
+    return mClient->registerGrabBuffer(dpy, fd);
+}
+
+status_t SurfaceComposerClient::unregisterGrabBuffer(DisplayID dpy)
+{
+    return mClient->unregisterGrabBuffer(dpy);
+}
+
+status_t SurfaceComposerClient::grabScreen(bool incremental, Region &updatedRegion)
+{
+    return mClient->grabScreen(incremental, updatedRegion);
 }
 
 }; // namespace android
