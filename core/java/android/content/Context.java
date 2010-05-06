@@ -1122,6 +1122,13 @@ public abstract class Context {
     public static final String POWER_SERVICE = "power";
     /**
      * Use with {@link #getSystemService} to retrieve a
+     * {@link android.os.RemoteControl} for handling remote control of
+     * the device's display and keyboard, eg VNC servers, or screen
+     * grabbers.
+     */
+    public static final String REMOTE_CONTROL_SERVICE = "remote";
+    /**
+     * Use with {@link #getSystemService} to retrieve a
      * {@link android.view.WindowManager} for accessing the system's window
      * manager.
      *

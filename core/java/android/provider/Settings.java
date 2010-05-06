@@ -1975,6 +1975,11 @@ public final class Settings {
         public static final String ALLOW_MOCK_LOCATION = "mock_location";
 
         /**
+         * Setting to allow remote control from any application, regardless of signature
+         */
+        public static final String ALLOW_UNCHECKED_REMOTE_CONTROL = "remote_control";
+
+        /**
          * The Android ID (a unique 64-bit value) as a hex string.
          * Identical to that obtained by calling
          * GoogleLoginService.getAndroidId(); it is also placed here
@@ -2425,6 +2430,7 @@ public final class Settings {
         public static final String[] SETTINGS_TO_BACKUP = {
             ADB_ENABLED,
             ALLOW_MOCK_LOCATION,
+            ALLOW_UNCHECKED_REMOTE_CONTROL,
             PARENTAL_CONTROL_ENABLED,
             PARENTAL_CONTROL_REDIRECT_URL,
             USB_MASS_STORAGE_ENABLED,

@@ -85,6 +85,7 @@ class ServerThread extends Thread {
 
         HardwareService hardware = null;
         PowerManagerService power = null;
+        RemoteControlService remote = null;
         BatteryService battery = null;
         ConnectivityService connectivity = null;
         IPackageManager pm = null;
@@ -167,6 +168,10 @@ class ServerThread extends Thread {
 
             ((ActivityManagerService)ServiceManager.getService("activity"))
                     .setWindowManager(wm);
+
+            Log.i(TAG, "Remote Control");
+            remote = new RemoteControlService(context);
+            ServiceManager.addService(Context.REMOTE_CONTROL_SERVICE, remote);
 
             // Skip Bluetooth if we have an emulator kernel
             // TODO: Use a more reliable check to see if this product should

@@ -1849,6 +1849,15 @@
     <!-- Button allowing a developer to connect a debugger to an application that is not responding. -->
     <string name="debug">Debug</string>
 
+    <!-- Title of the alert when an unauthorised application tries to use remote control. -->
+    <string name="rcerr_title">Security Warning</string>
+    <!-- Text of the alert that is displayed when an unauthorised application tries to use remote control. -->
+    <string name="rcerr_body">The application <xliff:g id="application">%1$s</xliff:g>
+        has attempted to take control of the device without permission. This may be a
+        sign of malware. The attempt has been denied.</string>
+    <!-- Button that is displayed when an unauthorised application tries to use remote control. -->
+    <string name="rcerr_button">Close</string>
+
     <!-- Displayed in the title of the chooser for things to do with text that
          is to be sent to another application. For example, I can send text through SMS or IM.  A dialog with those choices would be shown, and this would be the title. -->
     <string name="sendText">Select an action for text</string>

@@ -115,6 +115,8 @@ LOCAL_SRC_FILES += \
 	core/java/android/os/IParentalControlCallback.aidl \
 	core/java/android/os/IPermissionController.aidl \
 	core/java/android/os/IPowerManager.aidl \
+	core/java/android/os/IRemoteControl.aidl \
+	core/java/android/os/IRemoteControlClient.aidl \
     core/java/android/service/wallpaper/IWallpaperConnection.aidl \
     core/java/android/service/wallpaper/IWallpaperEngine.aidl \
     core/java/android/service/wallpaper/IWallpaperService.aidl \
@@ -219,6 +221,7 @@ aidl_files := \
 	frameworks/base/core/java/android/os/Bundle.aidl \
 	frameworks/base/core/java/android/os/ParcelFileDescriptor.aidl \
 	frameworks/base/core/java/android/os/ParcelUuid.aidl \
+	frameworks/base/core/java/android/os/RemoteControl.aidl \
 	frameworks/base/core/java/android/view/KeyEvent.aidl \
 	frameworks/base/core/java/android/view/MotionEvent.aidl \
 	frameworks/base/core/java/android/view/Surface.aidl \

@@ -1132,6 +1132,12 @@
         android:permissionGroup="android.permission-group.SYSTEM_TOOLS"
         android:protectionLevel="signatureOrSystem" />
 
+    <!-- Allows applications to authorise other packages to use the
+         remote control service, or to revoke such authorisation. -->
+    <permission android:name="android.permission.AUTHORISE_REMOTE_CONTROL"
+        android:permissionGroup="android.permission-group.SYSTEM_TOOLS"
+        android:protectionLevel="signature" />
+
     <application android:process="system"
                  android:persistent="true"
                  android:hasCode="false"
