@@ -121,6 +121,68 @@ static void SurfaceSession_kill(JNIEnv* env, jobject clazz)
     }
 }
 
+static jint SurfaceSession_registerGrabBuffer(JNIEnv* env, jobject clazz,
+                                       jint dpy, jobject fd)
+{
+    SurfaceComposerClient* client =
+            (SurfaceComposerClient*)env->GetIntField(clazz, sso.client);
+    status_t rv = -ENOENT;
+    if(fd == NULL) {
+        rv = -EINVAL;
+    } else if(client != 0) {
+        jclass clazz2 = env->FindClass("java/io/FileDescriptor");
+        int fd2 = env->GetIntField(fd, env->GetFieldID(clazz2, "descriptor", "I"));
+
+        rv = client->registerGrabBuffer(dpy, fd2);
+    }
+    return rv;
+}
+
+static jint SurfaceSession_unregisterGrabBuffer(JNIEnv* env, jobject clazz,
+                                         jint dpy)
+{
+    SurfaceComposerClient* client =
+            (SurfaceComposerClient*)env->GetIntField(clazz, sso.client);
+    status_t rv = -ENOENT;
+    if(client != 0) {
+        rv = client->unregisterGrabBuffer(dpy);
+    }
+    return rv;
+}
+
+static jint SurfaceSession_grabScreen(JNIEnv* env, jobject clazz,
+                                      jboolean incremental, jobject regionObject)
+{
+    SurfaceComposerClient* client =
+            (SurfaceComposerClient*)env->GetIntField(clazz, sso.client);
+    Region updatedRegion;
+    status_t rv = -ENOENT;
+
+    if(client != 0) {
+        SkRegion* rgn = NULL;
+
+        if(regionObject != NULL) {
+            rgn = (SkRegion*)env->GetIntField(regionObject, no.native_region);
+        }
+
+        rv = client->grabScreen(incremental, updatedRegion);
+
+        if((regionObject != NULL) && (rv == NO_ERROR)) {
+            rgn->setEmpty();
+
+            Region::const_iterator it = updatedRegion.begin();
+            Region::const_iterator const end = updatedRegion.end();
+
+            while (it != end) {
+                const Rect& r = *it++;
+                rgn->op(r.left, r.top, r.right, r.bottom, SkRegion::kUnion_Op);
+            }
+        }
+    }
+
+    return rv;
+}
+
 // ----------------------------------------------------------------------------
 
 static sp<SurfaceControl> getSurfaceControl(JNIEnv* env, jobject clazz)
@@ -616,6 +678,9 @@ static JNINativeMethod gSurfaceSessionMethods[] = {
 	{"init",     "()V",  (void*)SurfaceSession_init },
 	{"destroy",  "()V",  (void*)SurfaceSession_destroy },
     {"kill",     "()V",  (void*)SurfaceSession_kill },
+    {"registerGrabBuffer",      "(ILjava/io/FileDescriptor;)I", (void*)SurfaceSession_registerGrabBuffer },
+    {"unregisterGrabBuffer",    "(I)I", (void*)SurfaceSession_unregisterGrabBuffer },
+    {"grabScreen",              "(ZLandroid/graphics/Region;)I", (void*)SurfaceSession_grabScreen },
 };
 
 static JNINativeMethod gSurfaceMethods[] = {
