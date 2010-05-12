@@ -167,6 +167,20 @@ static jboolean Region_writeToParcel(JNIEnv* env, jobject clazz, const SkRegion*
     return true;
 }
 
+static jboolean Region_readFromParcel(JNIEnv* env, jobject clazz, SkRegion* region, jobject parcel)
+{
+    if (parcel == NULL) {
+        return false;
+    }
+
+    android::Parcel* p = android::parcelForJavaObject(env, parcel);
+
+    size_t size = p->readInt32();
+    region->unflatten(p->readInplace(size));
+
+    return true;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static jboolean Region_equals(JNIEnv* env, jobject clazz, const SkRegion *r1, const SkRegion* r2)
@@ -248,6 +262,7 @@ static JNINativeMethod gRegionMethods[] = {
     // parceling methods
     { "nativeCreateFromParcel", "(Landroid/os/Parcel;)I",           (void*)Region_createFromParcel  },
     { "nativeWriteToParcel",    "(ILandroid/os/Parcel;)Z",          (void*)Region_writeToParcel     },
+    { "nativeReadFromParcel",   "(ILandroid/os/Parcel;)Z",          (void*)Region_readFromParcel    },
     { "nativeEquals",           "(II)Z",                            (void*)Region_equals            },
 };
 

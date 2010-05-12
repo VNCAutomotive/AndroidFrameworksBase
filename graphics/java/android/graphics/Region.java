@@ -305,12 +305,22 @@ public class Region implements Parcelable {
     }
 
     /**
-     * Write the region and its pixels to the parcel. The region can be
-     * rebuilt from the parcel by calling CREATOR.createFromParcel().
+     * Write the region to the parcel. The region can be rebuilt from
+     * the parcel by calling CREATOR.createFromParcel().
      * @param p    Parcel object to write the region data into
      */
     public void writeToParcel(Parcel p, int flags) {
         if (!nativeWriteToParcel(mNativeRegion, p)) {
+            throw new RuntimeException();
+        }
+    }
+
+    /**
+     * Read the region from a parcel.
+     * @param p Parcel object to read the region data from
+     */
+    public void readFromParcel(Parcel p) {
+        if (!nativeReadFromParcel(mNativeRegion, p)) {
             throw new RuntimeException();
         }
     }
@@ -368,6 +378,9 @@ public class Region implements Parcelable {
     private static native int nativeCreateFromParcel(Parcel p);
     private static native boolean nativeWriteToParcel(int native_region,
                                                       Parcel p);
+
+    private static native boolean nativeReadFromParcel(int native_region,
+                                                       Parcel p);
 
     private static native boolean nativeEquals(int native_r1, int native_r2);
 
