@@ -303,6 +303,66 @@ void DisplayHardware::acquireScreen() const
     DisplayHardwareBase::acquireScreen();
 }
 
+status_t DisplayHardware::getDisplaySurfaceImage(uint32_t x, uint32_t y, uint32_t w,
+                                                 uint32_t h, uint8_t* data) const
+{
+    uint32_t bpp = bytesPerPixel(mFormat);
+    uint8_t *row = data + (x * bpp) + (y * mWidth * bpp);
+    GLenum err, format, type;
+
+    glPixelStorei(GL_PACK_ALIGNMENT, 1); // set results byte-aligned
+
+    switch(mFormat) {
+    case PIXEL_FORMAT_RGB_565: // emulator, ADP1
+
+        format = GL_RGB;
+        type = GL_UNSIGNED_SHORT_5_6_5;
+
+        break;
+
+    case PIXEL_FORMAT_RGBA_8888: // Nexus One
+    case PIXEL_FORMAT_RGBX_8888:
+
+        format = GL_RGBA;
+        type = GL_UNSIGNED_BYTE;
+
+        break;
+
+    default:
+        LOGE("getDisplaySurfaceImage: unsupported pixel format %d", mFormat);
+        return BAD_VALUE;
+    }
+
+    if(w == mWidth)
+    {
+        /* We can read the entire rectangle with a single call. On
+         * some GL implementations - in particular, the Nexus One -
+         * this is significantly faster than iterating over the lines
+         * one at a time.
+         *
+         * If OpenGL ES included the GL_PACK_ROW_LENGTH pixel store
+         * parameter, we could do this for every rectangle. */
+        glReadPixels(x, y, w, h, format, type, (GLvoid *)row);
+    }
+    else
+    {
+        uint32_t i;
+        for(i=0; i<h; i++)
+        {
+            glReadPixels(x, y + i, w, 1, format, type, (GLvoid *)row);
+            row += mWidth * bpp;
+        }
+    }
+
+    err = glGetError();
+    if(err != GL_NO_ERROR) {
+        LOGE("getDisplaySurfaceImage: %x", err);
+        return UNKNOWN_ERROR;
+    }
+
+    return NO_ERROR;
+}
+
 uint32_t DisplayHardware::getPageFlipCount() const {
     return mPageFlipCount;
 }

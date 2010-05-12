@@ -521,10 +521,63 @@ void SurfaceFlinger::postFramebuffer()
         const DisplayHardware& hw(graphicPlane(0).displayHardware());
         const nsecs_t now = systemTime();
         mDebugInSwapBuffers = now;
+        handleScreenGrabs();
         hw.flip(mInvalidRegion);
         mLastSwapBufferTime = systemTime() - now;
         mDebugInSwapBuffers = 0;
         mInvalidRegion.clear();
+    }
+}
+
+void SurfaceFlinger::handleScreenGrabs()
+{
+    int32_t i;
+
+    Mutex::Autolock _l(mStateLock);
+
+    for(i=mGrabbers.size(); i>0; i--) {
+
+        sp<BClient> client = mGrabbers[i-1].promote();
+        if(client == NULL) {
+
+            /* This client has died - ignore it here */
+
+        } else {
+
+            if(mSecureFrameBuffer) {
+
+                /* mSecureFrameBuffer is set if a surface with the SECURE
+                 * flag is visible. In this case we need to disallow
+                 * screen grabbing.
+                 *
+                 * We also test it in grabScreen() to avoid triggering
+                 * unnecessary full redraws when possible. */
+
+                client->mGrabError = PERMISSION_DENIED;
+
+            } else {
+
+                Region::const_iterator it = mInvalidRegion.begin();
+                Region::const_iterator const end = mInvalidRegion.end();
+                const DisplayHardware& hw(graphicPlane(0).displayHardware());
+                status_t err = 0;
+
+                while ((err == 0) && (it != end)) {
+                    const Rect& r = *it++;
+                    int yy = hw.getHeight() - (r.top + r.height());
+                    err = hw.getDisplaySurfaceImage(r.left, yy, r.width(), r.height(), (uint8_t *)client->mClientBuffer);
+                    client->mGrabRegion.subtractSelf(r);
+                }
+
+                client->mGrabError = err;
+            }
+
+            if(client->mGrabError || client->mGrabRegion.isEmpty())
+            {
+                client->mGrabCV.broadcast();
+                mGrabbers.removeAt(i-1);
+            }
+        }
     }
 }
 
@@ -818,6 +871,19 @@ void SurfaceFlinger::handleRepaint()
 {
     // compute the invalid region
     mInvalidRegion.orSelf(mDirtyRegion);
+
+    // check for pending screen grabs, and add their requested regions
+    // to the area to be drawn
+    int i;
+    for(i=mGrabbers.size(); i>0; i--) {
+        sp<BClient> client = mGrabbers[i-1].promote();
+        if(client == NULL) {
+            mGrabbers.removeAt(i-1);
+        } else {
+            mInvalidRegion.orSelf(client->mGrabRegion);
+        }
+    }
+
     if (mInvalidRegion.isEmpty()) {
         // nothing to do
         return;
@@ -1778,6 +1844,64 @@ status_t BClient::destroySurface(SurfaceID sid)
 status_t BClient::setState(int32_t count, const layer_state_t* states)
 {
     return mFlinger->setClientState(mId, count, states);
+}
+
+status_t BClient::grabScreen(DisplayID dpy, int fd)
+{
+    if (UNLIKELY(checkCallingPermission(
+            String16("android.permission.READ_FRAME_BUFFER")) == false))
+    { // not allowed
+        LOGE("Permission Denial: "
+                "can't take screenshots from pid=%d, uid=%d\n",
+                IPCThreadState::self()->getCallingPid(),
+                IPCThreadState::self()->getCallingUid());
+        return PERMISSION_DENIED;
+    }
+
+    // For now, we assume only one display.
+
+    Mutex::Autolock _l(mFlinger->mStateLock);
+
+    if(mFlinger->mSecureFrameBuffer) {
+        /* mSecureFrameBuffer is set if a surface with the SECURE
+         * flag is visible. In this case we need to disallow
+         * screen grabbing.
+         *
+         * We also test it in handleScreenGrabs() to cover the case
+         * where a secure window becomes visible while the grab is
+         * waiting to be processed. */
+        return PERMISSION_DENIED;
+    }
+
+    const DisplayHardware& hw(mFlinger->graphicPlane(0).displayHardware());
+    mClientBufferSize = hw.getWidth() * hw.getHeight() * bytesPerPixel(hw.getFormat());
+
+    mClientBuffer = mmap(0, mClientBufferSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
+    if(mClientBuffer == MAP_FAILED)
+    {
+        LOGE("mmap(): %s", strerror(errno));
+        return -errno;
+    }
+
+    mFlinger->mGrabbers.add(this);
+
+    mGrabRegion.set(hw.getWidth(), hw.getHeight());
+
+    mFlinger->signalEvent();
+
+    while(!mGrabRegion.isEmpty())
+    {
+        mGrabCV.wait(mFlinger->mStateLock);
+    }
+
+    if(munmap(mClientBuffer, mClientBufferSize) < 0)
+    {
+        LOGE("munmap() failed (%s) - not sure what to do", strerror(errno));
+    }
+    mClientBuffer = NULL;
+
+    return mGrabError;
 }
 
 // ---------------------------------------------------------------------------

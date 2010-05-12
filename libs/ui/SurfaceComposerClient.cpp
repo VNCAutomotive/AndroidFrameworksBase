@@ -616,5 +616,10 @@ status_t SurfaceComposerClient::setFreezeTint(SurfaceID id, uint32_t tint)
     return NO_ERROR;
 }
 
+status_t SurfaceComposerClient::grabScreen(DisplayID dpy, int fd)
+{
+    return mClient->grabScreen(dpy, fd);
+}
+
 }; // namespace android
 

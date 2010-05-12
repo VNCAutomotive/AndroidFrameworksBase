@@ -108,6 +108,9 @@ public:
     static ssize_t getDisplayHeight(DisplayID dpy);
     static ssize_t getDisplayOrientation(DisplayID dpy);
 
+    // Grab a screenshot
+    status_t grabScreen(DisplayID dpy, int fd);
+
     status_t linkToComposerDeath(const sp<IBinder::DeathRecipient>& recipient,
             void* cookie = NULL, uint32_t flags = 0);
 

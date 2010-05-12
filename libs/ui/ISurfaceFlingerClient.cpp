@@ -53,7 +53,8 @@ enum {
     GET_CBLK = IBinder::FIRST_CALL_TRANSACTION,
     CREATE_SURFACE,
     DESTROY_SURFACE,
-    SET_STATE
+    SET_STATE,
+    GRAB_SCREEN
 };
 
 class BpSurfaceFlingerClient : public BpInterface<ISurfaceFlingerClient>
@@ -110,6 +111,16 @@ public:
         for (int i=0 ; i<count ; i++)
             states[i].write(data);
         remote()->transact(SET_STATE, data, &reply);
+        return reply.readInt32();
+    }
+
+    virtual status_t grabScreen(DisplayID dpy, int fd)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(ISurfaceFlingerClient::getInterfaceDescriptor());
+        data.writeInt32(dpy);
+        data.writeFileDescriptor(fd);
+        remote()->transact(GRAB_SCREEN, data, &reply);
         return reply.readInt32();
     }
 };
@@ -178,6 +189,13 @@ status_t BnSurfaceFlingerClient::onTransact(
             status_t err = setState(count, states);
             delete [] states;
             reply->writeInt32(err);
+            return NO_ERROR;
+        } break;
+        case GRAB_SCREEN: {
+            CHECK_INTERFACE(ISurfaceFlingerClient, data, reply);
+            DisplayID dpy = data.readInt32();
+            int fd = data.readFileDescriptor();
+            reply->writeInt32( grabScreen(dpy, fd) );
             return NO_ERROR;
         } break;
         default:

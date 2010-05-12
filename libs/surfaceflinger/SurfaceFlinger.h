@@ -275,6 +275,7 @@ private:
             void        postFramebuffer();
             void        composeSurfaces(const Region& dirty);
             void        unlockClients();
+            void        handleScreenGrabs();
 
 
             void        destroyConnection(ClientID cid);
@@ -328,6 +329,7 @@ private:
                 GraphicPlane                            mGraphicPlanes[1];
                 bool                                    mLayersRemoved;
                 Vector< sp<Client> >                    mDisconnectedClients;
+                Vector< wp<BClient> >                   mGrabbers;
 
                 // constant members (no synchronization needed for access)
                 sp<IMemoryHeap>             mServerHeap;
@@ -407,10 +409,21 @@ public:
     virtual status_t destroySurface(SurfaceID surfaceId);
     virtual status_t setState(int32_t count, const layer_state_t* states);
 
+    virtual status_t grabScreen(DisplayID dpy, int fd);
+
 private:
+    friend class SurfaceFlinger;
+
     ClientID            mId;
     SurfaceFlinger*     mFlinger;
     sp<IMemoryHeap>     mCblk;
+
+    void*               mClientBuffer; // Pointer to mmap()ed screen grab buffer
+    size_t              mClientBufferSize; // size of mClientBuffer in bytes
+
+    Region              mGrabRegion;
+    status_t            mGrabError;
+    Condition           mGrabCV;
 };
 
 // ---------------------------------------------------------------------------
